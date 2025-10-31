@@ -1,0 +1,321 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
+import 'success_screen.dart';
+
+const List<Map<String, dynamic>> funAvatars = [
+  {'id': 'astronaut', 'icon': Icons.rocket_launch, 'color': Colors.blue},
+  {'id': 'wizard', 'icon': Icons.auto_fix_high, 'color': Colors.purple},
+  {'id': 'adventurer', 'icon': Icons.hiking, 'color': Colors.green},
+  {'id': 'explorer', 'icon': Icons.compass_calibration, 'color': Colors.orange},
+  {'id': 'pirate', 'icon': Icons.sailing, 'color': Colors.brown},
+];
+
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> with TickerProviderStateMixin {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  String? _selectedAvatarId;
+  double _passwordStrength = 0.0;
+  double _progress = 0.0;
+  String _milestoneMessage = "Start your adventure!";
+  
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
+
+  bool _isAvatarSelected = false;
+  bool _isEmailValid = false;
+  bool _isPasswordStrong = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _progressAnimation = Tween<double>(begin: 0.0, end: 0.0).animate(_progressController);
+
+    _emailController.addListener(_updateProgress);
+    _passwordController.addListener(() {
+      _checkPasswordStrength(_passwordController.text);
+      _updateProgress();
+    });
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _progressController.dispose();
+    super.dispose();
+  }
+
+  void _checkPasswordStrength(String password) {
+    double strength = 0.0;
+    if (password.isNotEmpty) {
+      if (password.length >= 8) strength += 0.25;
+      if (RegExp(r'[A-Z]').hasMatch(password)) strength += 0.25;
+      if (RegExp(r'[a-z]').hasMatch(password)) strength += 0.25;
+      if (RegExp(r'[0-9]').hasMatch(password)) strength += 0.15;
+      if (RegExp(r'[!@#\$&*~]').hasMatch(password)) strength += 0.10;
+    }
+    setState(() {
+      _passwordStrength = strength.clamp(0.0, 1.0);
+      _isPasswordStrong = _passwordStrength >= 0.75;
+    });
+  }
+
+  Color _getStrengthColor() {
+    if (_passwordStrength < 0.3) return Colors.red;
+    if (_passwordStrength < 0.75) return Colors.orange;
+    return Colors.green;
+  }
+  
+  void _updateProgress() {
+    double newProgress = 0.0;
+    int completedSteps = 0;
+    
+    if (_selectedAvatarId != null) completedSteps++;
+    
+    _isEmailValid = _emailController.text.isNotEmpty && _emailController.text.contains('@');
+    if (_isEmailValid) completedSteps++;
+    
+    if (_isPasswordStrong) completedSteps++;
+
+    if (completedSteps == 3) completedSteps++;
+
+    newProgress = completedSteps / 4.0;
+    
+    if (newProgress != _progress) {
+      double oldProgress = _progress;
+      setState(() {
+        _progress = newProgress;
+      });
+      
+      _progressAnimation = Tween<double>(begin: oldProgress, end: newProgress).animate(_progressController)
+        ..addListener(() { setState(() {}); });
+
+      _progressController.forward(from: 0.0);
+      _checkMilestone(newProgress);
+    }
+  }
+
+  void _checkMilestone(double newProgress) {
+    String newMessage = _milestoneMessage;
+    if (newProgress >= 0.25 && newProgress < 0.5) {
+      if (_milestoneMessage != "Great start!") {
+         HapticFeedback.mediumImpact(); 
+      }
+      newMessage = "Great start!";
+    } else if (newProgress >= 0.5 && newProgress < 0.75) {
+      if (_milestoneMessage != "Halfway there!") {
+         HapticFeedback.mediumImpact(); 
+      }
+      newMessage = "Halfway there!";
+    } else if (newProgress >= 0.75 && newProgress < 1.0) {
+      if (_milestoneMessage != "Almost done!") {
+         HapticFeedback.mediumImpact(); 
+      }
+      newMessage = "Almost done!";
+    } else if (newProgress >= 1.0) {
+      if (_milestoneMessage != "Ready for adventure!") {
+         HapticFeedback.lightImpact(); 
+      }
+      newMessage = "Ready for adventure!";
+    }
+
+    if (newMessage != _milestoneMessage) {
+       setState(() { _milestoneMessage = newMessage; });
+    }
+  }
+
+  void _submitForm() {
+    if (_formKey.currentState!.validate() && _selectedAvatarId != null) {
+      List<String> achievedBadges = _calculateBadges();
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SuccessScreen(
+            selectedAvatarId: _selectedAvatarId!,
+            achievedBadges: achievedBadges,
+          ),
+        ),
+      );
+    } else if (_selectedAvatarId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an avatar to continue the adventure.')),
+      );
+    }
+  }
+
+  List<String> _calculateBadges() {
+    List<String> badges = [];
+    final now = DateTime.now();
+
+    if (_isPasswordStrong) {
+      badges.add("Strong Password Master");
+    }
+
+    if (now.hour < 12) {
+      badges.add("The Early Bird Special");
+    }
+
+    if (_isAvatarSelected && _isEmailValid && _isPasswordStrong) {
+      badges.add("Profile Completer");
+    }
+
+    return badges;
+  }
+  
+  Widget _buildAvatarSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Choose Your Adventurer Avatar:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: funAvatars.map((avatar) {
+            bool isSelected = _selectedAvatarId == avatar['id'];
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedAvatarId = avatar['id'];
+                  _isAvatarSelected = true;
+                });
+                _updateProgress();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isSelected ? avatar['color'].withOpacity(0.2) : Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: isSelected ? Border.all(color: avatar['color'], width: 3) : null,
+                ),
+                child: Icon(avatar['icon'] as IconData, size: 30, color: avatar['color'] as Color),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  Widget _buildProgressTracker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Adventure Progress:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          value: _progressAnimation.value,
+          minHeight: 12,
+          borderRadius: BorderRadius.circular(6),
+          color: Colors.indigo.shade400,
+          backgroundColor: Colors.indigo.shade100,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${(_progress * 100).toInt()}% Complete: $_milestoneMessage',
+          style: TextStyle(fontSize: 14, color: Colors.indigo.shade600, fontStyle: FontStyle.italic),
+        ),
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Start Your Adventure!'),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _buildProgressTracker(),
+
+                _buildAvatarSelector(),
+
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    suffixIcon: _isEmailValid ? const Icon(Icons.check_circle, color: Colors.green) : null,
+                  ),
+                  validator: (value) {
+                    if (value == null || !value.contains('@')) {
+                      return 'A valid email is required to receive quest updates.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Secret Password',
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.length < 6) {
+                      return 'Password must be at least 6 characters.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+
+                LinearProgressIndicator(
+                  value: _passwordStrength,
+                  minHeight: 8,
+                  backgroundColor: Colors.grey.shade300,
+                  valueColor: AlwaysStoppedAnimation<Color>(_getStrengthColor()),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    _passwordStrength < 0.3
+                        ? 'Weak: Add more characters and symbols.'
+                        : _passwordStrength < 0.75
+                            ? 'Moderate: Try mixing in numbers and symbols.'
+                            : 'Strong Password! ⚡',
+                    style: TextStyle(color: _getStrengthColor()),
+                  ),
+                ),
+                const SizedBox(height: 40),
+
+                ElevatedButton(
+                  onPressed: _progress == 1.0 ? _submitForm : null, 
+                  child: Text(_progress == 1.0 ? 'Begin Adventure!' : 'Complete Registration (${(_progress * 100).toInt()}%)'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
